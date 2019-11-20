@@ -33,9 +33,9 @@ type xlsxIndex struct {
 }
 
 type xlsxSharedStrings struct {
-	XMLName xml.Name `xml:"http://schemas.openxmlformats.org/spreadsheetml/2006/main sst"`
-	//Count   int                `xml:"count,attr"`
+	XMLName xml.Name           `xml:"http://schemas.openxmlformats.org/spreadsheetml/2006/main sst"`
 	Strings []xlsxSharedString `xml:"si"`
+	//Count   int                `xml:"count,attr"`
 }
 
 type xlsxSharedString struct {
