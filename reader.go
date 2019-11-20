@@ -6,8 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net/url"
-	"path/filepath"
 	"strings"
 )
 
@@ -42,14 +40,14 @@ type xlsxSharedString struct {
 	T string `xml:"t"`
 }
 
-type xlsxWorkbookRels struct {
-	XMLName       xml.Name               `xml:"http://schemas.openxmlformats.org/package/2006/relationships Relationships"`
-	Relationships []xlsxWorkbookRelation `xml:"Relationship"`
+type xlsxContentType struct {
+	XMLName xml.Name   `xml:"http://schemas.openxmlformats.org/package/2006/content-types Types"`
+	Types   []xlsxType `xml:"Override"`
 }
 
-type xlsxWorkbookRelation struct {
-	Target string `xml:"Target,attr"`
-	Type   string `xml:"Type,attr"`
+type xlsxType struct {
+	PartName    string `xml:"PartName,attr"`    // file
+	ContentType string `xml:"ContentType,attr"` // url
 }
 
 // Close closes all the buffers and readers.
@@ -66,8 +64,8 @@ func Open(filename string) (*XLSX, error) {
 	if err == nil {
 		for _, zFile := range zr.File {
 			// read where the worksheets are
-			if strings.Contains(zFile.Name, "workbook.xml.rels") {
-				index, err := parseRels(zFile)
+			if zFile.Name == "[Content_Types].xml" {
+				index, err := parseContentType(zFile)
 				if err != nil {
 					return nil, err
 				}
@@ -81,10 +79,9 @@ func Open(filename string) (*XLSX, error) {
 	return nil, errors.New("rels file not found")
 }
 
-func parseRels(zFile *zip.File) (index xlsxIndex, err error) {
+func parseContentType(zFile *zip.File) (index xlsxIndex, err error) {
 	var (
 		zfr io.ReadCloser
-		uri *url.URL
 	)
 
 	zfr, err = zFile.Open()
@@ -93,21 +90,17 @@ func parseRels(zFile *zip.File) (index xlsxIndex, err error) {
 	}
 	defer zfr.Close()
 
-	rels := xlsxWorkbookRels{}
+	ct := xlsxContentType{}
 
 	dec := xml.NewDecoder(zfr)
-	err = dec.Decode(&rels)
+	err = dec.Decode(&ct)
 	if err == nil {
-		for _, r := range rels.Relationships {
-			uri, err = url.Parse(r.Type)
-			if err != nil {
-				return // TODO: Do not return yet, try other
-			}
-			switch filepath.Base(uri.Path) {
-			case "worksheet":
-				index.files = append(index.files, r.Target)
-			case "sharedStrings":
-				index.sharedStr = r.Target
+		for _, ts := range ct.Types {
+			switch ts.ContentType {
+			case "application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml":
+				index.files = append(index.files, ts.PartName)
+			case "application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml":
+				index.sharedStr = ts.PartName
 			}
 		}
 	}
@@ -152,14 +145,17 @@ func extractWorksheets(zr *zip.ReadCloser, index xlsxIndex) (*XLSX, error) {
 	return nil, err
 }
 
+func findNameIn(name, where string) bool {
+	if name[0] == '/' {
+		return name[1:] == where
+	}
+	return strings.Contains(where, name)
+}
+
 func getZipFile(zr *zip.ReadCloser, filename string) (zFile *zip.File, err error) {
 	var found = false
 	for _, zFile = range zr.File {
-		if filename[0] == '/' {
-			found = zFile.Name == filename[1:]
-		} else {
-			found = strings.Contains(zFile.Name, filename)
-		}
+		found = findNameIn(filename, zFile.Name)
 		if found {
 			break
 		}
@@ -178,7 +174,8 @@ func readShared(zr *zip.ReadCloser, filename string) ([]string, error) {
 		err   error
 	)
 	for _, zFile := range zr.File {
-		if found = strings.Contains(zFile.Name, filename); found {
+		found = findNameIn(filename, zFile.Name)
+		if found {
 			rc, err = zFile.Open()
 			break
 		}
