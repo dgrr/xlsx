@@ -139,10 +139,9 @@ func extractWorksheets(zr *zip.ReadCloser, index xlsxIndex) (*XLSX, error) {
 			parent: xs,
 			zFile:  zFile,
 		})
-		return xs, nil
 	}
 
-	return nil, err
+	return xs, err
 }
 
 func findNameIn(name, where string) bool {
