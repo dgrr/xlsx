@@ -33,8 +33,8 @@ type xlsxIndex struct {
 }
 
 type xlsxSharedStrings struct {
-	XMLName xml.Name           `xml:"http://schemas.openxmlformats.org/spreadsheetml/2006/main sst"`
-	Count   int                `xml:"count,attr"`
+	XMLName xml.Name `xml:"http://schemas.openxmlformats.org/spreadsheetml/2006/main sst"`
+	//Count   int                `xml:"count,attr"`
 	Strings []xlsxSharedString `xml:"si"`
 }
 
@@ -52,35 +52,7 @@ type xlsxWorkbookRelation struct {
 	Type   string `xml:"Type,attr"`
 }
 
-type xlsxWorksheet struct {
-	sharedStrings []string
-	XMLName       xml.Name      `xml:"http://schemas.openxmlformats.org/spreadsheetml/2006/main worksheet"`
-	SheetData     xlsxSheetData `xml:"sheetData"`
-}
-
-type xlsxSheetData struct {
-	XMLName xml.Name  `xml:"sheetData"`
-	Row     []xlsxRow `xml:"row"`
-}
-
-type xlsxRow struct {
-	R int     `xml:"r,attr"`
-	C []xlsxC `xml:"c"`
-}
-
-type xlsxC struct {
-	XMLName xml.Name
-	T       string  `xml:"t,attr,omitempty"` // can be `inlineStr`, `n`, `s`
-	V       string  `xml:"v,omitempty"`      // Value
-	Is      *xlsxIS `xml:"is,omitempty"`     // inline string
-}
-
-type xlsxIS struct {
-	XMLName xml.Name
-	T       string `xml:"t"` // value of the inline string
-}
-
-// Close ...
+// Close closes all the buffers and readers.
 func (xlsx *XLSX) Close() error {
 	if xlsx.zr == nil {
 		return nil
@@ -88,7 +60,7 @@ func (xlsx *XLSX) Close() error {
 	return xlsx.zr.Close()
 }
 
-// Open ...
+// Open just opens the file for reading.
 func Open(filename string) (*XLSX, error) {
 	zr, err := zip.OpenReader(filename)
 	if err == nil {

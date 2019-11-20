@@ -7,13 +7,30 @@ import (
 	"strconv"
 )
 
-// Sheet ...
+// Sheet represents an spreadsheet.
 type Sheet struct {
 	parent *XLSX
 	zFile  *zip.File
 }
 
-// Open ...
+type xlsxRow struct {
+	R int     `xml:"r,attr"`
+	C []xlsxC `xml:"c"`
+}
+
+type xlsxC struct {
+	XMLName xml.Name
+	T       string  `xml:"t,attr,omitempty"` // can be `inlineStr`, `n`, `s`
+	V       string  `xml:"v,omitempty"`      // Value
+	Is      *xlsxIS `xml:"is,omitempty"`     // inline string
+}
+
+type xlsxIS struct {
+	XMLName xml.Name
+	T       string `xml:"t"` // value of the inline string
+}
+
+// Open opens a sheet to read it.
 func (s *Sheet) Open() (*SheetReader, error) {
 	rc, err := s.zFile.Open()
 	if err == nil {
@@ -27,7 +44,8 @@ func (s *Sheet) Open() (*SheetReader, error) {
 	return nil, err
 }
 
-// SheetReader ...
+// SheetReader creates an structure able to read row by row
+// the spreadsheet data.
 type SheetReader struct {
 	s   *Sheet
 	rc  io.ReadCloser
@@ -36,6 +54,10 @@ type SheetReader struct {
 	err error
 }
 
+// Error returns the error occurred during Next().
+//
+// If no error is returned here but Next() returned false it can
+// be caused because the EOF was reach.
 func (sr *SheetReader) Error() error {
 	return sr.err
 }
@@ -61,7 +83,9 @@ loop:
 	return nil
 }
 
-// Next ...
+// Next returns true if the row has been successfully readed.
+//
+// if false is returned check the Error() function.
 func (sr *SheetReader) Next() bool {
 	var (
 		err error
@@ -113,12 +137,12 @@ loop:
 	return err == nil && sr.err == nil
 }
 
-// Row ...
+// Row returns the last readed row.
 func (sr *SheetReader) Row() []string {
 	return sr.row
 }
 
-// Close ...
+// Close closes the sheet file reader.
 func (sr *SheetReader) Close() error {
 	return sr.rc.Close()
 }
