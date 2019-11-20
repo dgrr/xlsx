@@ -8,13 +8,14 @@ import (
 	"io"
 	"net/url"
 	"path/filepath"
-	"strconv"
 	"strings"
 )
 
 // XLSX ...
 type XLSX struct {
-	Cells [][]string
+	sharedStrings []string
+	zr            *zip.ReadCloser
+	Sheets        []*Sheet
 }
 
 // sheetData
@@ -79,23 +80,33 @@ type xlsxIS struct {
 	T       string `xml:"t"` // value of the inline string
 }
 
-// ReadFrom ...
-func ReadFrom(filename string) (*XLSX, error) {
+// Close ...
+func (xlsx *XLSX) Close() error {
+	if xlsx.zr == nil {
+		return nil
+	}
+	return xlsx.zr.Close()
+}
+
+// Open ...
+func Open(filename string) (*XLSX, error) {
 	zr, err := zip.OpenReader(filename)
 	if err == nil {
-		defer zr.Close()
 		for _, zFile := range zr.File {
+			// read where the worksheets are
 			if strings.Contains(zFile.Name, "workbook.xml.rels") {
 				index, err := parseRels(zFile)
 				if err != nil {
 					return nil, err
 				}
-				return readFrom(zr, index)
+
+				// read the worksheets
+				return extractWorksheets(zr, index)
 			}
 		}
 	}
 
-	return nil, errors.New("not found")
+	return nil, errors.New("rels file not found")
 }
 
 func parseRels(zFile *zip.File) (index xlsxIndex, err error) {
@@ -111,7 +122,6 @@ func parseRels(zFile *zip.File) (index xlsxIndex, err error) {
 	defer zfr.Close()
 
 	rels := xlsxWorkbookRels{}
-	//sharedStr :=
 
 	dec := xml.NewDecoder(zfr)
 	err = dec.Decode(&rels)
@@ -130,33 +140,63 @@ func parseRels(zFile *zip.File) (index xlsxIndex, err error) {
 		}
 	}
 	if len(index.files) == 0 {
-		err = errors.New("data not found")
+		err = errors.New("no data files found")
 	}
 
 	return
 }
 
-func readFrom(zr *zip.ReadCloser, index xlsxIndex) (*XLSX, error) {
+func extractWorksheets(zr *zip.ReadCloser, index xlsxIndex) (*XLSX, error) {
 	var (
 		err    error
 		shared []string
 	)
 	sharedFile := index.sharedStr
-	filename := index.files[0]
 
 	if len(sharedFile) > 0 {
 		shared, err = readShared(zr, sharedFile)
-	}
-	if err != nil {
-		return nil, err
+		if err != nil {
+			return nil, err
+		}
 	}
 
-	ws, err := readWorksheet(zr, filename)
-	if err == nil {
-		return newXLSX(ws, shared)
+	xs := new(XLSX)
+	xs.sharedStrings = shared
+
+	for _, filename := range index.files {
+		zFile, err := getZipFile(zr, filename)
+		if err != nil {
+			xs = nil
+			return nil, err
+		}
+
+		xs.Sheets = append(xs.Sheets, &Sheet{
+			parent: xs,
+			zFile:  zFile,
+		})
+		return xs, nil
 	}
 
 	return nil, err
+}
+
+func getZipFile(zr *zip.ReadCloser, filename string) (zFile *zip.File, err error) {
+	var found = false
+	for _, zFile = range zr.File {
+		if filename[0] == '/' {
+			found = zFile.Name == filename[1:]
+		} else {
+			found = strings.Contains(zFile.Name, filename)
+		}
+		if found {
+			break
+		}
+	}
+	if !found {
+		err = fmt.Errorf("%s not found", filename)
+	}
+
+	return zFile, err
 }
 
 func readShared(zr *zip.ReadCloser, filename string) ([]string, error) {
@@ -192,61 +232,4 @@ func readShared(zr *zip.ReadCloser, filename string) ([]string, error) {
 	}
 
 	return nil, err
-}
-
-func readWorksheet(zr *zip.ReadCloser, filename string) (*xlsxWorksheet, error) {
-	var (
-		rc    io.ReadCloser
-		found bool
-		err   error
-	)
-	for _, zfr := range zr.File {
-		if filename[0] == '/' {
-			found = zfr.Name == filename[1:]
-		} else {
-			found = strings.Contains(zfr.Name, filename)
-		}
-		if found {
-			rc, err = zfr.Open()
-			break
-		}
-	}
-	if !found {
-		err = fmt.Errorf("%s not found", filename)
-	}
-	if err != nil {
-		return nil, err
-	}
-	defer rc.Close()
-
-	ws := new(xlsxWorksheet)
-	ec := xml.NewDecoder(rc)
-
-	return ws, ec.Decode(ws)
-}
-
-func newXLSX(ws *xlsxWorksheet, shared []string) (xs *XLSX, err error) {
-	if ws == nil {
-		panic("ws cannot be nil")
-	}
-	xs = new(XLSX)
-	xs.Cells = make([][]string, len(ws.SheetData.Row))
-	for i, row := range ws.SheetData.Row {
-		xs.Cells[i] = make([]string, len(row.C))
-		for j, c := range row.C {
-			switch c.T {
-			case "inlineStr": // inline string
-				xs.Cells[i][j] = c.Is.T
-			case "s": // shared string
-				idx, err := strconv.Atoi(c.V)
-				if err == nil && idx < len(shared) {
-					xs.Cells[i][j] = shared[idx]
-				}
-			default: // "n"
-				xs.Cells[i][j] = c.V
-			}
-		}
-	}
-
-	return
 }
