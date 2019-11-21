@@ -14,7 +14,7 @@ type Sheet struct {
 }
 
 type xlsxRow struct {
-	R int     `xml:"r,attr"`
+	R int     `xml:"r,attr,omitempty"` // Row number
 	C []xlsxC `xml:"c"`
 }
 
@@ -59,6 +59,9 @@ type SheetReader struct {
 // If no error is returned here but Next() returned false it can
 // be caused because the EOF was reach.
 func (sr *SheetReader) Error() error {
+	if sr.err == io.EOF {
+		return nil
+	}
 	return sr.err
 }
 
@@ -91,13 +94,12 @@ func (sr *SheetReader) Next() bool {
 		err error
 		tk  xml.Token
 	)
+	sr.row = sr.row[:0]
 loop:
-	for err == nil {
+	for sr.err == nil {
 		tk, err = sr.ec.Token()
 		if err != nil {
-			if err != io.EOF {
-				sr.err = err
-			}
+			sr.err = err
 			break
 		}
 
@@ -106,12 +108,12 @@ loop:
 			if stk.Name.Local != "row" {
 				continue
 			}
-			sr.row = sr.row[:0]
 
 			row := xlsxRow{}
 			shared := sr.s.parent.sharedStrings
 			sr.err = sr.ec.DecodeElement(&row, &stk)
 			if sr.err == nil {
+				// TODO: Check the `r` parameter in rows.
 				for _, c := range row.C {
 					switch c.T {
 					case "inlineStr": // inline string
@@ -129,12 +131,12 @@ loop:
 			break loop
 		case xml.EndElement:
 			if stk.Name.Local == "sheetData" {
-				break loop
+				sr.err = io.EOF
 			}
 		}
 	}
 
-	return err == nil && sr.err == nil
+	return sr.err == nil
 }
 
 // Row returns the last readed row.

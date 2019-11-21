@@ -5,12 +5,12 @@ import (
 	"time"
 )
 
-// ToDate converts the date from X calendar to gregorian (time.Time)
+// ToDate converts the date from excel format to time.Time
 func ToDate(n float64) time.Time {
 	return time.Unix(int64((n-25569)*86400), 0)
 }
 
-// StringToDate ...
+// StringToDate converts the string from string to float and to time.Time
 func StringToDate(s string) (t time.Time, err error) {
 	n, err := strconv.ParseFloat(s, 64)
 	if err == nil {
