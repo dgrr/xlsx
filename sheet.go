@@ -124,7 +124,12 @@ loop:
 							sr.row = append(sr.row, shared[idx])
 						}
 					default: // "n"
-						sr.row = append(sr.row, c.V)
+						f, err := strconv.ParseFloat(c.V, 64)
+						if err == nil {
+							sr.row = append(sr.row, strconv.FormatFloat(f, 'f', -1, 64))
+						} else {
+							sr.row = append(sr.row, c.V)
+						}
 					}
 				}
 			}
