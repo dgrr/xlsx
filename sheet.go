@@ -2,9 +2,11 @@ package xlsx
 
 import (
 	"archive/zip"
-	"encoding/xml"
+	"fmt"
 	"io"
 	"strconv"
+
+	"github.com/dgrr/xml"
 )
 
 // Sheet represents an spreadsheet.
@@ -19,15 +21,13 @@ type xlsxRow struct {
 }
 
 type xlsxC struct {
-	XMLName xml.Name
-	T       string  `xml:"t,attr,omitempty"` // can be `inlineStr`, `n`, `s`
-	V       string  `xml:"v,omitempty"`      // Value
-	Is      *xlsxIS `xml:"is,omitempty"`     // inline string
+	T  string  `xml:"t,attr,omitempty"` // can be `inlineStr`, `n`, `s`
+	V  string  `xml:"v,omitempty"`      // Value
+	Is *xlsxIS `xml:"is,omitempty"`     // inline string
 }
 
 type xlsxIS struct {
-	XMLName xml.Name
-	T       string `xml:"t"` // value of the inline string
+	T string `xml:"t"` // value of the inline string
 }
 
 // Open opens a sheet to read it.
@@ -37,7 +37,7 @@ func (s *Sheet) Open() (*SheetReader, error) {
 		sr := &SheetReader{
 			s:  s,
 			rc: rc,
-			ec: xml.NewDecoder(rc),
+			r:  xml.NewReader(rc),
 		}
 		return sr, sr.skip()
 	}
@@ -49,7 +49,7 @@ func (s *Sheet) Open() (*SheetReader, error) {
 type SheetReader struct {
 	s   *Sheet
 	rc  io.ReadCloser
-	ec  *xml.Decoder
+	r   *xml.Reader
 	row []string
 	err error
 }
@@ -65,53 +65,51 @@ func (sr *SheetReader) Error() error {
 	return sr.err
 }
 
+// skip will skips all the irrelevant fields
 func (sr *SheetReader) skip() error {
 loop:
-	for {
-		tk, err := sr.ec.Token()
-		if err != nil {
-			if err != io.EOF {
-				sr.err = err
-			}
-			return sr.err
-		}
-		switch stk := tk.(type) {
-		case xml.StartElement:
-			if stk.Name.Local == "sheetData" {
+	for sr.r.Next() {
+		switch e := sr.r.Element().(type) {
+		case *xml.StartElement:
+			if e.Name == "sheetData" {
 				break loop
 			}
 		}
 	}
 
-	return nil
+	return sr.r.Err()
+}
+
+func parseIntOrZero(s string) int {
+	n, err := strconv.Atoi(s)
+	if err != nil {
+		n = 0
+	}
+	return n
 }
 
 // Next returns true if the row has been successfully readed.
 //
 // if false is returned check the Error() function.
 func (sr *SheetReader) Next() bool {
-	var (
-		err error
-		tk  xml.Token
-	)
 	sr.row = sr.row[:0]
 loop:
-	for sr.err == nil {
-		tk, err = sr.ec.Token()
-		if err != nil {
-			sr.err = err
-			break
-		}
-
-		switch stk := tk.(type) {
-		case xml.StartElement:
-			if stk.Name.Local != "row" {
+	for sr.r.Next() {
+		switch e := sr.r.Element().(type) {
+		case *xml.StartElement:
+			if e.Name != "row" {
 				continue
 			}
 
 			row := xlsxRow{}
+			for _, kv := range e.Attrs {
+				if kv.K == "r" {
+					row.R = parseIntOrZero(kv.V)
+				}
+			}
+
 			shared := sr.s.parent.sharedStrings
-			sr.err = sr.ec.DecodeElement(&row, &stk)
+			sr.err = sr.decodeRow(&row)
 			if sr.err == nil {
 				// TODO: Check the `r` parameter in rows.
 				for _, c := range row.C {
@@ -134,14 +132,58 @@ loop:
 				}
 			}
 			break loop
-		case xml.EndElement:
-			if stk.Name.Local == "sheetData" {
+		case *xml.EndElement:
+			if e.Name == "sheetData" {
 				sr.err = io.EOF
 			}
 		}
+		if sr.err != nil {
+			break
+		}
+	}
+	if sr.err == nil && sr.r.Err() != nil {
+		sr.err = sr.r.Err()
 	}
 
 	return sr.err == nil
+}
+
+func (sr *SheetReader) decodeRow(row *xlsxRow) error {
+	c := xlsxC{}
+loop:
+	for sr.r.Next() {
+		switch e := sr.r.Element().(type) {
+		case *xml.StartElement:
+			switch e.Name {
+			case "c":
+				for _, kv := range e.Attrs {
+					if kv.K == "t" {
+						c.T = kv.V
+						break
+					}
+				}
+			case "is":
+				c.Is = new(xlsxIS)
+			case "t", "v":
+			default:
+				return fmt.Errorf("unexpected element: `%s` when looking for a `c`", e.Name)
+			}
+		case *xml.TextElement:
+			if c.Is != nil {
+				c.Is.T = string(*e)
+			} else {
+				c.V = string(*e)
+			}
+
+			row.C = append(row.C, c)
+			c = xlsxC{}
+		case *xml.EndElement:
+			if e.Name == "row" {
+				break loop
+			}
+		}
+	}
+	return nil
 }
 
 // Row returns the last readed row.
