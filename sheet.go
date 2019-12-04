@@ -96,11 +96,12 @@ func parseIntOrZero(s string) int {
 // if false is returned check the Error() function.
 func (sr *SheetReader) Next() bool {
 	sr.row = sr.row[:0]
+	shared := sr.s.parent.sharedStrings
 loop:
 	for sr.r.Next() {
 		switch e := sr.r.Element().(type) {
 		case *xml.StartElement:
-			if bytes.Equal(e.NameBytes(), rowString) {
+			if !bytes.Equal(e.NameBytes(), rowString) {
 				xml.ReleaseStart(e)
 				continue
 			}
@@ -112,7 +113,6 @@ loop:
 				}
 			}
 
-			shared := sr.s.parent.sharedStrings
 			sr.err = sr.decodeRow(&row)
 			if sr.err == nil {
 				// TODO: Check the `r` parameter in rows.
@@ -122,7 +122,7 @@ loop:
 						sr.row = append(sr.row, c.Is.T)
 					case "s": // shared string
 						idx, err := strconv.Atoi(c.V)
-						if err == nil && idx < len(shared) {
+						if err == nil && idx < len(shared) && idx >= 0 {
 							sr.row = append(sr.row, shared[idx])
 						}
 					default: // "n"
