@@ -62,11 +62,9 @@ func Open(filename string) (*XLSX, error) {
 }
 
 func getPartName(e *xml.StartElement) (partName string, err error) {
-	for _, kv := range e.Attrs() {
-		if bytes.Equal(kv.KeyBytes(), partNameString) {
-			partName = kv.Value()
-			break
-		}
+	kv := e.Attrs().GetBytes(partNameString)
+	if kv != nil {
+		partName = kv.Value()
 	}
 	if partName == "" {
 		err = errors.New("PartName parameter not found")
@@ -93,21 +91,19 @@ func parseContentType(zFile *zip.File) (index xlsxIndex, err error) {
 				continue
 			}
 			var partName string
-			for _, kv := range e.Attrs() {
-				if bytes.Equal(kv.KeyBytes(), contentTypeString) {
-					switch {
-					case bytes.Equal(kv.ValueBytes(), workSheetURIString):
-						partName, err = getPartName(e)
-						if err == nil {
-							index.files = append(index.files, partName)
-						}
-					case bytes.Equal(kv.ValueBytes(), sharedStringsURIString):
-						partName, err = getPartName(e)
-						if err == nil {
-							index.sharedStr = partName
-						}
+			kv := e.Attrs().GetBytes(contentTypeString)
+			if kv != nil {
+				switch {
+				case bytes.Equal(kv.ValueBytes(), workSheetURIString):
+					partName, err = getPartName(e)
+					if err == nil {
+						index.files = append(index.files, partName)
 					}
-					break
+				case bytes.Equal(kv.ValueBytes(), sharedStringsURIString):
+					partName, err = getPartName(e)
+					if err == nil {
+						index.sharedStr = partName
+					}
 				}
 			}
 			xml.ReleaseStart(e)

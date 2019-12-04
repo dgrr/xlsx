@@ -134,11 +134,10 @@ loop:
 		case *xml.StartElement:
 			switch e.Name() {
 			case "c":
-				for _, kv := range e.Attrs() {
-					if bytes.Equal(kv.KeyBytes(), tString) {
-						T = kv.ValueBytes()
-						break
-					}
+				attr := e.Attrs().GetBytes(tString)
+				if attr != nil {
+					T = attr.ValueBytes()
+					break
 				}
 			case "is":
 				Is = true
