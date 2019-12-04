@@ -2,11 +2,12 @@ package xlsx
 
 import (
 	"archive/zip"
-	"encoding/xml"
 	"errors"
 	"fmt"
 	"io"
 	"strings"
+
+	"github.com/dgrr/xml"
 )
 
 // XLSX ...
@@ -30,26 +31,6 @@ type xlsxIndex struct {
 	files     []string
 }
 
-type xlsxSharedStrings struct {
-	XMLName xml.Name           `xml:"http://schemas.openxmlformats.org/spreadsheetml/2006/main sst"`
-	Strings []xlsxSharedString `xml:"si"`
-	//Count   int                `xml:"count,attr"`
-}
-
-type xlsxSharedString struct {
-	T string `xml:"t"`
-}
-
-type xlsxContentType struct {
-	XMLName xml.Name   `xml:"http://schemas.openxmlformats.org/package/2006/content-types Types"`
-	Types   []xlsxType `xml:"Override"`
-}
-
-type xlsxType struct {
-	PartName    string `xml:"PartName,attr"`    // file
-	ContentType string `xml:"ContentType,attr"` // url
-}
-
 // Close closes all the buffers and readers.
 func (xlsx *XLSX) Close() error {
 	if xlsx.zr == nil {
@@ -71,12 +52,25 @@ func Open(filename string) (*XLSX, error) {
 				}
 
 				// read the worksheets
-				return extractWorksheets(zr, index)
+				return extractWorksheets(zr, &index)
 			}
 		}
 	}
 
 	return nil, errors.New("rels file not found")
+}
+
+func getPartName(e *xml.StartElement) (partName string, err error) {
+	for _, kv := range e.Attrs {
+		if kv.K == "PartName" {
+			partName = kv.V
+			break
+		}
+	}
+	if partName == "" {
+		err = errors.New("PartName parameter not found")
+	}
+	return
 }
 
 func parseContentType(zFile *zip.File) (index xlsxIndex, err error) {
@@ -90,28 +84,41 @@ func parseContentType(zFile *zip.File) (index xlsxIndex, err error) {
 	}
 	defer zfr.Close()
 
-	ct := xlsxContentType{}
-
-	dec := xml.NewDecoder(zfr)
-	err = dec.Decode(&ct)
-	if err == nil {
-		for _, ts := range ct.Types {
-			switch ts.ContentType {
-			case "application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml":
-				index.files = append(index.files, ts.PartName)
-			case "application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml":
-				index.sharedStr = ts.PartName
+	r := xml.NewReader(zfr)
+	for r.Next() {
+		switch e := r.Element().(type) {
+		case *xml.StartElement:
+			if e.Name != "Override" {
+				continue
+			}
+			var partName string
+			for _, kv := range e.Attrs {
+				if kv.K == "ContentType" {
+					switch kv.V {
+					case "application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml":
+						partName, err = getPartName(e)
+						if err == nil {
+							index.files = append(index.files, partName)
+						}
+					case "application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml":
+						partName, err = getPartName(e)
+						if err == nil {
+							index.sharedStr = partName
+						}
+					}
+					break
+				}
 			}
 		}
 	}
-	if len(index.files) == 0 {
+	if err == nil && len(index.files) == 0 {
 		err = errors.New("no data files found")
 	}
 
 	return
 }
 
-func extractWorksheets(zr *zip.ReadCloser, index xlsxIndex) (*XLSX, error) {
+func extractWorksheets(zr *zip.ReadCloser, index *xlsxIndex) (*XLSX, error) {
 	var (
 		err    error
 		shared []string
@@ -187,17 +194,28 @@ func readShared(zr *zip.ReadCloser, filename string) ([]string, error) {
 	}
 	defer rc.Close()
 
-	ss := xlsxSharedStrings{}
-	ec := xml.NewDecoder(rc)
-
-	err = ec.Decode(&ss)
-	if err == nil {
-		sstr := make([]string, len(ss.Strings))
-		for i := range ss.Strings {
-			sstr[i] = ss.Strings[i].T
+	ss := make([]string, 0)
+	r := xml.NewReader(rc)
+	T := false
+loop:
+	for r.Next() {
+		switch e := r.Element().(type) {
+		case *xml.StartElement:
+			if e.Name == "t" {
+				T = true
+			} else {
+				T = false
+			}
+		case *xml.TextElement:
+			if T {
+				ss = append(ss, string(*e))
+			}
+		case *xml.EndElement:
+			if e.Name == "sst" {
+				break loop
+			}
 		}
-		return sstr, nil
 	}
 
-	return nil, err
+	return ss, err
 }

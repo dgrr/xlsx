@@ -16,18 +16,18 @@ type Sheet struct {
 }
 
 type xlsxRow struct {
-	R int     `xml:"r,attr,omitempty"` // Row number
-	C []xlsxC `xml:"c"`
+	R int // Row number
+	C []xlsxC
 }
 
 type xlsxC struct {
-	T  string  `xml:"t,attr,omitempty"` // can be `inlineStr`, `n`, `s`
-	V  string  `xml:"v,omitempty"`      // Value
-	Is *xlsxIS `xml:"is,omitempty"`     // inline string
+	T  string  // can be `inlineStr`, `n`, `s`
+	V  string  // Value
+	Is *xlsxIS // inline string
 }
 
 type xlsxIS struct {
-	T string `xml:"t"` // value of the inline string
+	T string // value of the inline string
 }
 
 // Open opens a sheet to read it.
