@@ -2,6 +2,7 @@ package xlsx
 
 import (
 	"archive/zip"
+	"bytes"
 	"fmt"
 	"io"
 	"strconv"
@@ -71,9 +72,11 @@ loop:
 	for sr.r.Next() {
 		switch e := sr.r.Element().(type) {
 		case *xml.StartElement:
-			if e.Name == "sheetData" {
+			if e.Name() == "sheetData" {
+				xml.ReleaseStart(e)
 				break loop
 			}
+			xml.ReleaseStart(e)
 		}
 	}
 
@@ -97,14 +100,15 @@ loop:
 	for sr.r.Next() {
 		switch e := sr.r.Element().(type) {
 		case *xml.StartElement:
-			if e.Name != "row" {
+			if bytes.Equal(e.NameBytes(), rowString) {
+				xml.ReleaseStart(e)
 				continue
 			}
 
 			row := xlsxRow{}
-			for _, kv := range e.Attrs {
-				if kv.K == "r" {
-					row.R = parseIntOrZero(kv.V)
+			for _, kv := range e.Attrs() {
+				if bytes.Equal(kv.KeyBytes(), rString) {
+					row.R = parseIntOrZero(kv.Value())
 				}
 			}
 
@@ -131,11 +135,13 @@ loop:
 					}
 				}
 			}
+			xml.ReleaseStart(e)
 			break loop
 		case *xml.EndElement:
-			if e.Name == "sheetData" {
+			if e.Name() == "sheetData" {
 				sr.err = io.EOF
 			}
+			xml.ReleaseEnd(e)
 		}
 		if sr.err != nil {
 			break
@@ -154,11 +160,11 @@ loop:
 	for sr.r.Next() {
 		switch e := sr.r.Element().(type) {
 		case *xml.StartElement:
-			switch e.Name {
+			switch e.Name() {
 			case "c":
-				for _, kv := range e.Attrs {
-					if kv.K == "t" {
-						c.T = kv.V
+				for _, kv := range e.Attrs() {
+					if bytes.Equal(kv.KeyBytes(), tString) {
+						c.T = kv.Value()
 						break
 					}
 				}
@@ -166,8 +172,9 @@ loop:
 				c.Is = new(xlsxIS)
 			case "t", "v":
 			default:
-				return fmt.Errorf("unexpected element: `%s` when looking for a `c`", e.Name)
+				return fmt.Errorf("unexpected element: `%s` when looking for a `c`", e.Name())
 			}
+			xml.ReleaseStart(e)
 		case *xml.TextElement:
 			if c.Is != nil {
 				c.Is.T = string(*e)
@@ -178,9 +185,11 @@ loop:
 			row.C = append(row.C, c)
 			c = xlsxC{}
 		case *xml.EndElement:
-			if e.Name == "row" {
+			if bytes.Equal(e.NameBytes(), rowString) {
+				xml.ReleaseEnd(e)
 				break loop
 			}
+			xml.ReleaseEnd(e)
 		}
 	}
 	return nil

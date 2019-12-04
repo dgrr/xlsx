@@ -2,6 +2,7 @@ package xlsx
 
 import (
 	"archive/zip"
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -61,9 +62,9 @@ func Open(filename string) (*XLSX, error) {
 }
 
 func getPartName(e *xml.StartElement) (partName string, err error) {
-	for _, kv := range e.Attrs {
-		if kv.K == "PartName" {
-			partName = kv.V
+	for _, kv := range e.Attrs() {
+		if bytes.Equal(kv.KeyBytes(), partNameString) {
+			partName = kv.Value()
 			break
 		}
 	}
@@ -88,19 +89,19 @@ func parseContentType(zFile *zip.File) (index xlsxIndex, err error) {
 	for r.Next() {
 		switch e := r.Element().(type) {
 		case *xml.StartElement:
-			if e.Name != "Override" {
+			if !bytes.Equal(e.NameBytes(), overrideString) {
 				continue
 			}
 			var partName string
-			for _, kv := range e.Attrs {
-				if kv.K == "ContentType" {
-					switch kv.V {
-					case "application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml":
+			for _, kv := range e.Attrs() {
+				if bytes.Equal(kv.KeyBytes(), contentTypeString) {
+					switch {
+					case bytes.Equal(kv.ValueBytes(), workSheetURIString):
 						partName, err = getPartName(e)
 						if err == nil {
 							index.files = append(index.files, partName)
 						}
-					case "application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml":
+					case bytes.Equal(kv.ValueBytes(), sharedStringsURIString):
 						partName, err = getPartName(e)
 						if err == nil {
 							index.sharedStr = partName
@@ -109,6 +110,7 @@ func parseContentType(zFile *zip.File) (index xlsxIndex, err error) {
 					break
 				}
 			}
+			xml.ReleaseStart(e)
 		}
 	}
 	if err == nil && len(index.files) == 0 {
@@ -201,19 +203,18 @@ loop:
 	for r.Next() {
 		switch e := r.Element().(type) {
 		case *xml.StartElement:
-			if e.Name == "t" {
-				T = true
-			} else {
-				T = false
-			}
+			T = bytes.Equal(e.NameBytes(), tString)
+			xml.ReleaseStart(e)
 		case *xml.TextElement:
 			if T {
 				ss = append(ss, string(*e))
 			}
 		case *xml.EndElement:
-			if e.Name == "sst" {
+			if bytes.Equal(e.NameBytes(), sstString) {
+				xml.ReleaseEnd(e)
 				break loop
 			}
+			xml.ReleaseEnd(e)
 		}
 	}
 
