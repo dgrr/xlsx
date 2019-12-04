@@ -127,6 +127,7 @@ func (sr *SheetReader) decodeRow(shared []string) error {
 		T   []byte
 		Is  bool
 		idx int
+		s   *string
 	)
 loop:
 	for sr.r.Next() {
@@ -137,8 +138,10 @@ loop:
 				attr := e.Attrs().GetBytes(tString)
 				if attr != nil {
 					T = attr.ValueBytes()
-					break
 				}
+				s = sr.nextString(idx)
+				sr.r.AssignNext(s)
+				idx++
 			case "is":
 				Is = true
 			case "t", "v":
@@ -146,35 +149,30 @@ loop:
 				return fmt.Errorf("unexpected element: `%s` when looking for a `c`", e.Name())
 			}
 			xml.ReleaseStart(e)
-		case *xml.TextElement:
-			s := sr.nextString(idx)
-			c := string(*e)
-			switch {
-			case Is, bytes.Equal(T, inlineString):
-				*s = c
-			case bytes.Equal(T, sString):
-				idx, err := strconv.Atoi(c)
-				if err != nil {
-					return err
-				}
-				if idx < len(shared) && idx >= 0 {
-					*s = shared[idx]
-				} else {
-					return fmt.Errorf("Got index %d. But overflows shared strings (%d)", idx, len(shared))
-				}
-			default:
-				f, err := strconv.ParseFloat(c, 64)
-				if err == nil {
-					*s = strconv.FormatFloat(f, 'f', -1, 64)
-				} else {
-					*s = c
-				}
-			}
-			Is = false
-			T = nil
-			idx++
 		case *xml.EndElement:
-			if bytes.Equal(e.NameBytes(), rowString) {
+			switch {
+			case bytes.Equal(e.NameBytes(), cString):
+				switch {
+				case Is, bytes.Equal(T, inlineString): // already assigned
+				case bytes.Equal(T, sString):
+					idx, err := strconv.Atoi(*s)
+					if err != nil {
+						return err
+					}
+					if idx < len(shared) && idx >= 0 {
+						*s = shared[idx]
+					} else {
+						return fmt.Errorf("Got index %d. But overflows shared strings (%d)", idx, len(shared))
+					}
+				default:
+					f, err := strconv.ParseFloat(*s, 64)
+					if err == nil {
+						*s = strconv.FormatFloat(f, 'f', -1, 64)
+					}
+				}
+				Is = false
+				T = nil
+			case bytes.Equal(e.NameBytes(), rowString):
 				xml.ReleaseEnd(e)
 				break loop
 			}
