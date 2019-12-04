@@ -16,21 +16,6 @@ type Sheet struct {
 	zFile  *zip.File
 }
 
-type xlsxRow struct {
-	R int // Row number
-	C []xlsxC
-}
-
-type xlsxC struct {
-	T  string  // can be `inlineStr`, `n`, `s`
-	V  string  // Value
-	Is *xlsxIS // inline string
-}
-
-type xlsxIS struct {
-	T string // value of the inline string
-}
-
 // Open opens a sheet to read it.
 func (s *Sheet) Open() (*SheetReader, error) {
 	rc, err := s.zFile.Open()
@@ -91,6 +76,16 @@ func parseIntOrZero(s string) int {
 	return n
 }
 
+func (sr *SheetReader) nextString(idx int) *string {
+	if idx < cap(sr.row) {
+		sr.row = sr.row[:idx+1]
+	} else {
+		sr.row = append(sr.row, make([]string, idx+1-cap(sr.row))...)
+	}
+
+	return &sr.row[idx]
+}
+
 // Next returns true if the row has been successfully readed.
 //
 // if false is returned check the Error() function.
@@ -106,36 +101,9 @@ loop:
 				continue
 			}
 
-			row := xlsxRow{}
-			for _, kv := range e.Attrs() {
-				if bytes.Equal(kv.KeyBytes(), rString) {
-					row.R = parseIntOrZero(kv.Value())
-				}
-			}
-
-			sr.err = sr.decodeRow(&row)
-			if sr.err == nil {
-				// TODO: Check the `r` parameter in rows.
-				for _, c := range row.C {
-					switch c.T {
-					case "inlineStr": // inline string
-						sr.row = append(sr.row, c.Is.T)
-					case "s": // shared string
-						idx, err := strconv.Atoi(c.V)
-						if err == nil && idx < len(shared) && idx >= 0 {
-							sr.row = append(sr.row, shared[idx])
-						}
-					default: // "n"
-						f, err := strconv.ParseFloat(c.V, 64)
-						if err == nil {
-							sr.row = append(sr.row, strconv.FormatFloat(f, 'f', -1, 64))
-						} else {
-							sr.row = append(sr.row, c.V)
-						}
-					}
-				}
-			}
 			xml.ReleaseStart(e)
+			sr.err = sr.decodeRow(shared)
+
 			break loop
 		case *xml.EndElement:
 			if e.Name() == "sheetData" {
@@ -154,8 +122,12 @@ loop:
 	return sr.err == nil
 }
 
-func (sr *SheetReader) decodeRow(row *xlsxRow) error {
-	c := xlsxC{}
+func (sr *SheetReader) decodeRow(shared []string) error {
+	var (
+		T   []byte
+		Is  bool
+		idx int
+	)
 loop:
 	for sr.r.Next() {
 		switch e := sr.r.Element().(type) {
@@ -164,26 +136,44 @@ loop:
 			case "c":
 				for _, kv := range e.Attrs() {
 					if bytes.Equal(kv.KeyBytes(), tString) {
-						c.T = kv.Value()
+						T = kv.ValueBytes()
 						break
 					}
 				}
 			case "is":
-				c.Is = new(xlsxIS)
+				Is = true
 			case "t", "v":
 			default:
 				return fmt.Errorf("unexpected element: `%s` when looking for a `c`", e.Name())
 			}
 			xml.ReleaseStart(e)
 		case *xml.TextElement:
-			if c.Is != nil {
-				c.Is.T = string(*e)
-			} else {
-				c.V = string(*e)
+			s := sr.nextString(idx)
+			c := string(*e)
+			switch {
+			case Is, bytes.Equal(T, inlineString):
+				*s = c
+			case bytes.Equal(T, sString):
+				idx, err := strconv.Atoi(c)
+				if err != nil {
+					return err
+				}
+				if idx < len(shared) && idx >= 0 {
+					*s = shared[idx]
+				} else {
+					return fmt.Errorf("Got index %d. But overflows shared strings (%d)", idx, len(shared))
+				}
+			default:
+				f, err := strconv.ParseFloat(c, 64)
+				if err == nil {
+					*s = strconv.FormatFloat(f, 'f', -1, 64)
+				} else {
+					*s = c
+				}
 			}
-
-			row.C = append(row.C, c)
-			c = xlsxC{}
+			Is = false
+			T = nil
+			idx++
 		case *xml.EndElement:
 			if bytes.Equal(e.NameBytes(), rowString) {
 				xml.ReleaseEnd(e)
