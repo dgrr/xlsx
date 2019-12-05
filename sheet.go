@@ -65,7 +65,7 @@ loop:
 		}
 	}
 
-	return sr.r.Err()
+	return sr.r.Error()
 }
 
 func parseIntOrZero(s string) int {
@@ -115,8 +115,8 @@ loop:
 			break
 		}
 	}
-	if sr.err == nil && sr.r.Err() != nil {
-		sr.err = sr.r.Err()
+	if sr.err == nil && sr.r.Error() != nil {
+		sr.err = sr.r.Error()
 	}
 
 	return sr.err == nil

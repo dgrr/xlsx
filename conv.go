@@ -19,23 +19,23 @@ func StringToDate(s string) (t time.Time, err error) {
 	return t, err
 }
 
-// StringToInt ...
+// StringToInt converts the string to an int64.
 func StringToInt(s string) (int64, error) {
 	return strconv.ParseInt(s, 10, 64)
 }
 
-// StringToUint ...
+// StringToUint converts the string to an uint64.
 func StringToUint(s string) (uint64, error) {
 	return strconv.ParseUint(s, 10, 64)
 }
 
-// MustStringToInt ...
+// MustStringToInt returns a int64 ignoring any error.
 func MustStringToInt(s string) int64 {
 	n, _ := strconv.ParseInt(s, 10, 64)
 	return n
 }
 
-// MustStringToUint ...
+// MustStringToUint returns a uint64 ignoring any error.
 func MustStringToUint(s string) uint64 {
 	n, _ := strconv.ParseUint(s, 10, 64)
 	return n
