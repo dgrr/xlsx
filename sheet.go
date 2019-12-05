@@ -57,7 +57,7 @@ loop:
 	for sr.r.Next() {
 		switch e := sr.r.Element().(type) {
 		case *xml.StartElement:
-			if e.Name() == "sheetData" {
+			if e.NameUnsafe() == "sheetData" {
 				xml.ReleaseStart(e)
 				break loop
 			}
@@ -106,7 +106,7 @@ loop:
 
 			break loop
 		case *xml.EndElement:
-			if e.Name() == "sheetData" {
+			if e.NameUnsafe() == "sheetData" {
 				sr.err = io.EOF
 			}
 			xml.ReleaseEnd(e)
@@ -133,7 +133,7 @@ loop:
 	for sr.r.Next() {
 		switch e := sr.r.Element().(type) {
 		case *xml.StartElement:
-			switch e.Name() {
+			switch e.NameUnsafe() {
 			case "c":
 				attr := e.Attrs().GetBytes(tString)
 				if attr != nil {
@@ -152,6 +152,9 @@ loop:
 		case *xml.EndElement:
 			switch {
 			case bytes.Equal(e.NameBytes(), cString):
+				if s == nil {
+					return fmt.Errorf("XML `%s` end element reached before `c` start element", e.Name())
+				}
 				switch {
 				case Is, bytes.Equal(T, inlineString): // already assigned
 				case bytes.Equal(T, sString):
