@@ -191,10 +191,13 @@ func (sr *SheetReader) Row() []string {
 
 // Read returns the row or error
 func (sr *SheetReader) Read() (record []string, err error) {
-	if !sr.Next() {
-		err = sr.Error()
-	} else {
+	if sr.Next() {
 		record = sr.Row()
+	} else {
+		err = sr.Error()
+		if err == nil {
+			err = io.EOF
+		}
 	}
 	return
 }
