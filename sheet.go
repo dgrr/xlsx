@@ -103,7 +103,6 @@ loop:
 
 			xml.ReleaseStart(e)
 			sr.err = sr.decodeRow(shared)
-
 			break loop
 		case *xml.EndElement:
 			if e.NameUnsafe() == "sheetData" {
@@ -188,6 +187,16 @@ loop:
 // Row returns the last readed row.
 func (sr *SheetReader) Row() []string {
 	return sr.row
+}
+
+// Read returns the row or error
+func (sr *SheetReader) Read() (record []string, err error) {
+	if !sr.Next() {
+		err = sr.Error()
+	} else {
+		record = sr.Row()
+	}
+	return
 }
 
 // Close closes the sheet file reader.
