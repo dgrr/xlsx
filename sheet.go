@@ -33,7 +33,7 @@ func (s *Sheet) Open() (*SheetReader, error) {
 // SheetReader creates an structure able to read row by row
 // the spreadsheet data.
 type SheetReader struct {
-	ReuseRecords bool
+	ReuseRecord bool
 	s   *Sheet
 	rc  io.ReadCloser
 	r   *xml.Reader
@@ -91,7 +91,7 @@ func (sr *SheetReader) nextString(idx int) *string {
 //
 // if false is returned check the Error() function.
 func (sr *SheetReader) Next() bool {
-	if sr.ReuseRecords {
+	if sr.ReuseRecord {
 		sr.row = sr.row[:0]
 	} else {
 		sr.row = nil
