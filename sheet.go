@@ -34,11 +34,11 @@ func (s *Sheet) Open() (*SheetReader, error) {
 // the spreadsheet data.
 type SheetReader struct {
 	ReuseRecord bool
-	s   *Sheet
-	rc  io.ReadCloser
-	r   *xml.Reader
-	row []string
-	err error
+	s           *Sheet
+	rc          io.ReadCloser
+	r           *xml.Reader
+	row         []string
+	err         error
 }
 
 // Error returns the error occurred during Next().
@@ -148,7 +148,7 @@ loop:
 				idx++
 			case "is":
 				Is = true
-			case "t", "v":
+			case "t", "v", "f":
 			default:
 				return fmt.Errorf("unexpected element: `%s` when looking for a `c`", e.Name())
 			}
