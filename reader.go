@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 
 	"github.com/dgrr/xml"
@@ -14,8 +15,9 @@ import (
 // XLSX ...
 type XLSX struct {
 	sharedStrings []string
-	zr            *zip.ReadCloser
+	zr            *zip.Reader
 	Sheets        []*Sheet
+	closer        io.Closer
 }
 
 // sheetData
@@ -37,13 +39,33 @@ func (xlsx *XLSX) Close() error {
 	if xlsx.zr == nil {
 		return nil
 	}
-	return xlsx.zr.Close()
+
+	if xlsx.closer != nil {
+		return xlsx.closer.Close()
+	}
+
+	return nil
 }
 
 // Open just opens the file for reading.
 func Open(filename string) (*XLSX, error) {
-	zr, err := zip.OpenReader(filename)
+	file, err := os.Open(filename)
+	if err != nil {
+		return nil, err
+	}
+
+	st, err := file.Stat()
+	if err != nil {
+		return nil, err
+	}
+
+	return OpenReader(file, st.Size())
+}
+
+func OpenReader(r io.ReaderAt, size int64) (*XLSX, error) {
+	zr, err := zip.NewReader(r, size)
 	if err == nil {
+		var xlsx *XLSX
 		for _, zFile := range zr.File {
 			// read where the worksheets are
 			if zFile.Name == "[Content_Types].xml" {
@@ -53,9 +75,16 @@ func Open(filename string) (*XLSX, error) {
 				}
 
 				// read the worksheets
-				return extractWorksheets(zr, &index)
+				xlsx, err = extractWorksheets(zr, &index)
+				if err == nil {
+					closer, ok := r.(io.Closer)
+					if ok {
+						xlsx.closer = closer
+					}
+				}
 			}
 		}
+		return xlsx, err
 	}
 
 	return nil, errors.New("rels file not found")
@@ -116,7 +145,7 @@ func parseContentType(zFile *zip.File) (index xlsxIndex, err error) {
 	return
 }
 
-func extractWorksheets(zr *zip.ReadCloser, index *xlsxIndex) (*XLSX, error) {
+func extractWorksheets(zr *zip.Reader, index *xlsxIndex) (*XLSX, error) {
 	var (
 		err    error
 		shared []string
@@ -156,7 +185,7 @@ func findNameIn(name, where string) bool {
 	return strings.Contains(where, name)
 }
 
-func getZipFile(zr *zip.ReadCloser, filename string) (zFile *zip.File, err error) {
+func getZipFile(zr *zip.Reader, filename string) (zFile *zip.File, err error) {
 	var found = false
 	for _, zFile = range zr.File {
 		found = findNameIn(filename, zFile.Name)
@@ -171,7 +200,7 @@ func getZipFile(zr *zip.ReadCloser, filename string) (zFile *zip.File, err error
 	return zFile, err
 }
 
-func readShared(zr *zip.ReadCloser, filename string) ([]string, error) {
+func readShared(zr *zip.Reader, filename string) ([]string, error) {
 	var (
 		rc    io.ReadCloser
 		found bool
