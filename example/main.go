@@ -5,7 +5,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/digilant/xlsx"
+	"github.com/dgrr/xlsx"
 )
 
 func main() {

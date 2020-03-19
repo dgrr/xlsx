@@ -6,7 +6,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/digilant/xlsx"
+	"github.com/dgrr/xlsx"
 )
 
 func main() {
@@ -20,7 +20,7 @@ func main() {
 	}
 	defer ws.Close()
 
-	dest := strings.Replace(os.Args[1], ".xlsx", ".csv2", -1)
+	dest := strings.Replace(os.Args[1], ".xlsx", ".csv", -1)
 
 	wr, err := os.Create(dest)
 	if err != nil {
