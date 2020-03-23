@@ -229,11 +229,9 @@ loop:
 		switch e := r.Element().(type) {
 		case *xml.StartElement:
 			T = bytes.Equal(e.NameBytes(), tString)
-			if !T {
+			if !T && e.HasEnd() {
 				// shared strings sometimes contains empty strings. Don't know why
-				if bytes.Equal(e.NameBytes(), tSlashString) {
-					ss = append(ss, "")
-				}
+				ss = append(ss, "")
 			}
 			xml.ReleaseStart(e)
 		case *xml.TextElement:

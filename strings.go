@@ -6,7 +6,6 @@ var (
 	overrideString         = []byte("Override")
 	sstString              = []byte("sst")
 	tString                = []byte("t")
-	tSlashString           = []byte("t/")
 	sString                = []byte("s")
 	rString                = []byte("r")
 	cString                = []byte("c")
