@@ -71,7 +71,7 @@ func OpenReader(r io.ReaderAt, size int64) (*XLSX, error) {
 			if zFile.Name == "[Content_Types].xml" {
 				index, err := parseContentType(zFile)
 				if err != nil {
-					return nil, err
+					return nil, fmt.Errorf("parseContentType: %s", err)
 				}
 
 				// read the worksheets
@@ -113,12 +113,13 @@ func parseContentType(zFile *zip.File) (index xlsxIndex, err error) {
 	defer zfr.Close()
 
 	r := xml.NewReader(zfr)
-	for r.Next() {
+	for err == nil && r.Next() {
 		switch e := r.Element().(type) {
 		case *xml.StartElement:
 			if !bytes.Equal(e.NameBytes(), overrideString) {
 				continue
 			}
+
 			var partName string
 			kv := e.Attrs().GetBytes(contentTypeString)
 			if kv != nil {
@@ -138,8 +139,12 @@ func parseContentType(zFile *zip.File) (index xlsxIndex, err error) {
 			xml.ReleaseStart(e)
 		}
 	}
-	if err == nil && len(index.files) == 0 {
-		err = errors.New("no data files found")
+	if err == nil {
+		if r.Error() != nil && r.Error() != io.EOF {
+			err = r.Error()
+		} else if len(index.files) == 0 {
+			err = errors.New("no data files found")
+		}
 	}
 
 	return
@@ -155,7 +160,7 @@ func extractWorksheets(zr *zip.Reader, index *xlsxIndex) (*XLSX, error) {
 	if len(sharedFile) > 0 {
 		shared, err = readShared(zr, sharedFile)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("error reading shared strings: %s", err)
 		}
 	}
 

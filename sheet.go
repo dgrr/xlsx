@@ -27,7 +27,7 @@ func (s *Sheet) Open() (*SheetReader, error) {
 		}
 		return sr, sr.skip()
 	}
-	return nil, err
+	return nil, fmt.Errorf("zip.Open(): %s", err)
 }
 
 // SheetReader creates an structure able to read row by row
@@ -98,7 +98,7 @@ func (sr *SheetReader) Next() bool {
 	}
 	shared := sr.s.parent.sharedStrings
 loop:
-	for sr.r.Next() {
+	for sr.err == nil && sr.r.Next() {
 		switch e := sr.r.Element().(type) {
 		case *xml.StartElement:
 			if !bytes.Equal(e.NameBytes(), rowString) {
@@ -115,12 +115,9 @@ loop:
 			}
 			xml.ReleaseEnd(e)
 		}
-		if sr.err != nil {
-			break
-		}
 	}
 	if sr.err == nil && sr.r.Error() != nil {
-		sr.err = sr.r.Error()
+		sr.err = fmt.Errorf("xml error: %s", sr.r.Error())
 	}
 
 	return sr.err == nil
@@ -200,10 +197,8 @@ func (sr *SheetReader) Read() (record []string, err error) {
 		record = sr.Row()
 	} else {
 		err = sr.Error()
-		if err == nil {
-			err = io.EOF
-		}
 	}
+
 	return
 }
 
