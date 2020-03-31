@@ -62,6 +62,7 @@ func Open(filename string) (*XLSX, error) {
 	return OpenReader(file, st.Size())
 }
 
+// OpenReader opens the reader as XLSX file.
 func OpenReader(r io.ReaderAt, size int64) (*XLSX, error) {
 	zr, err := zip.NewReader(r, size)
 	if err == nil {
