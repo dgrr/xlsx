@@ -227,6 +227,11 @@ func readShared(zr *zip.Reader, filename string) ([]string, error) {
 	}
 	defer rc.Close()
 
+	return parseShared(rc)
+}
+
+func parseShared(rc io.Reader) ([]string, error) {
+	var err error
 	ss := make([]string, 0)
 	r := xml.NewReader(rc)
 	T := false
