@@ -33,6 +33,7 @@ func (s *Sheet) Open() (*SheetReader, error) {
 // SheetReader creates an structure able to read row by row
 // the spreadsheet data.
 type SheetReader struct {
+	// ReuseRecord ...
 	ReuseRecord bool
 	s           *Sheet
 	rc          io.ReadCloser
