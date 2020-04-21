@@ -60,10 +60,8 @@ loop:
 		switch e := sr.r.Element().(type) {
 		case *xml.StartElement:
 			if e.NameUnsafe() == "sheetData" {
-				xml.ReleaseStart(e)
 				break loop
 			}
-			xml.ReleaseStart(e)
 		}
 	}
 
@@ -103,18 +101,15 @@ loop:
 		switch e := sr.r.Element().(type) {
 		case *xml.StartElement:
 			if !bytes.Equal(e.NameBytes(), rowString) {
-				xml.ReleaseStart(e)
 				continue
 			}
 
-			xml.ReleaseStart(e)
 			sr.err = sr.decodeRow(shared)
 			break loop
 		case *xml.EndElement:
 			if e.NameUnsafe() == "sheetData" {
 				sr.err = io.EOF
 			}
-			xml.ReleaseEnd(e)
 		}
 	}
 	if sr.err == nil && sr.r.Error() != nil {
@@ -150,7 +145,6 @@ loop:
 			default:
 				return fmt.Errorf("unexpected element: `%s` when looking for a `c`", e.Name())
 			}
-			xml.ReleaseStart(e)
 		case *xml.EndElement:
 			switch {
 			case bytes.Equal(e.NameBytes(), cString):
@@ -178,10 +172,8 @@ loop:
 				Is = false
 				T = nil
 			case bytes.Equal(e.NameBytes(), rowString):
-				xml.ReleaseEnd(e)
 				break loop
 			}
-			xml.ReleaseEnd(e)
 		}
 	}
 	return nil

@@ -137,7 +137,6 @@ func parseContentType(zFile *zip.File) (index xlsxIndex, err error) {
 					}
 				}
 			}
-			xml.ReleaseStart(e)
 		}
 	}
 	if err == nil {
@@ -244,17 +243,14 @@ loop:
 				// shared strings sometimes contains empty strings. Don't know why
 				ss = append(ss, "")
 			}
-			xml.ReleaseStart(e)
 		case *xml.TextElement:
 			if T {
 				ss = append(ss, string(*e))
 			}
 		case *xml.EndElement:
 			if bytes.Equal(e.NameBytes(), sstString) {
-				xml.ReleaseEnd(e)
 				break loop
 			}
-			xml.ReleaseEnd(e)
 		}
 	}
 
