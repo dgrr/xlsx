@@ -9,7 +9,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/dgrr/xml"
+	xml "github.com/dgrr/quickxml"
 )
 
 // XLSX ...
