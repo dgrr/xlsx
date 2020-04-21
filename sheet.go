@@ -7,7 +7,7 @@ import (
 	"io"
 	"strconv"
 
-	"github.com/dgrr/xml"
+	xml "github.com/dgrr/quickxml"
 )
 
 // Sheet represents an spreadsheet.
